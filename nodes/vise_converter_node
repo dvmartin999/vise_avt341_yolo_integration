@@ -1,0 +1,97 @@
+#!/usr/bin/env python
+import rospy
+import math
+import tf2_ros
+import tf2_py as tf2
+
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Twist
+from sensor_msgs.msg import PointCloud2
+from ackermann_msgs.msg import AckermannDriveStamped
+from tf.transformations import euler_from_quaternion
+from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
+
+class ViseConverter(object):
+
+    """
+    Convert messages between the AVT-341 NATO Autonomy Stack and the Neya VISE Simulator
+    """
+
+    def __init__(self):
+        rospy.init_node('vise_nato_converter')
+
+        # Set-up tf
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+        
+        # Set-up publishers
+        self.spectator_cam_pub = rospy.Publisher(
+            '/vise/spectator_pose', Pose, latch=True, queue_size=1)
+        self.nato_odom_pub = rospy.Publisher(
+            'avt_341/odometry', Odometry, latch=True, queue_size=1)
+        self.nato_lidar_pub = rospy.Publisher(
+            'avt_341/points', PointCloud2, latch=True, queue_size=1)
+        self.vise_cmd_pub = rospy.Publisher(
+            '/vise/mrzr/ackermann_cmd', AckermannDriveStamped, latch=True, queue_size=1)
+
+        # Set-up subscribers
+        self.odometry_sub = rospy.Subscriber(
+            '/vise/mrzr/odometry', Odometry, self.handle_odometry)
+        self.lidar_sub = rospy.Subscriber(
+            '/vise/mrzr/lidar/front/point_cloud', PointCloud2, self.handle_point_cloud)
+        self.nato_cmd_sub = rospy.Subscriber(
+            'avt_341/cmd_vel', Twist, self.handle_cmd_vel)
+
+
+    def handle_odometry(self, msg):
+        # Update the spectator camera so we're chasing the vehicle
+        pose = msg.pose.pose
+        (yaw, pitch, roll) = euler_from_quaternion ([pose.orientation.w,pose.orientation.x,pose.orientation.y,pose.orientation.z])
+        pose.position.x += 3*math.cos(yaw)
+        pose.position.y -= 3*math.sin(yaw)
+        pose.position.z += 2
+        self.spectator_cam_pub.publish(pose)
+
+        # VISE and NATO stack are perfectly aligned on odom, so just republish
+        self.nato_odom_pub.publish(msg)
+
+    def handle_point_cloud(self, msg):
+        # Need to change frame to odom (from lidar/front)
+        try:
+            trans = self.tf_buffer.lookup_transform("odom", msg.header.frame_id,
+                                                    msg.header.stamp,
+                                                    rospy.Duration(2))
+        except tf2.LookupException as ex:
+            print "Lookup exception converting ", msg.header.frame_id, " to odom"
+            print "TS: ", msg.header.stamp, " now: ", rospy.Time.now() 
+            rospy.logwarn(ex)
+            return
+        except tf2.ExtrapolationException as ex:
+            print "Extrapolation exception converting ", msg.header.frame_id, " to odom"
+            print "TS: ", msg.header.stamp, " now: ", rospy.Time.now() 
+            rospy.logwarn(ex)
+            return
+        points = do_transform_cloud(msg, trans)
+        points.header.frame_id = "odom"
+        self.nato_lidar_pub.publish(points)
+
+    def handle_cmd_vel(self, msg):
+        # Need to convert yaw_rate encoded in the twist into
+        # an ackermann steering angle. The incoming linear.x is actually
+	    # a throttle, so we apply a gain to that to convert to m/s command
+        cmd = AckermannDriveStamped()
+        cmd.header.stamp = rospy.Time.now()
+        cmd.drive.speed = msg.linear.x * 3.0
+        cmd.drive.steering_angle = msg.angular.z
+        #print "Sending commands: ", cmd.drive.speed, "  ", cmd.drive.steering_angle, "   ", cmd.header.stamp
+        self.vise_cmd_pub.publish(cmd)
+
+
+
+def main(args=None):
+    node = ViseConverter()
+    rospy.spin()
+
+if __name__ == '__main__':
+    main()

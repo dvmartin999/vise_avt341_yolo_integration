@@ -1,0 +1,14 @@
+<launch>
+
+  <include file="$(find avt_341)/launch/base.launch">
+    <arg name="waypoints_file" value="$(find nato_vise_integration)/config/waypoints.yaml" />
+    <arg name="robot_description_file" value="$(find avt_341)/config/avt_bot.urdf" />
+    <arg name="cost_vis" value="final" />
+    <arg name="display_type" value="none" />
+    <arg name="auto_launch_state_publisher" value="false"/>
+  </include>
+
+  <!-- Use this node to integrate to the Neya VISE simulator -->
+  <node name="vise_converter_node" pkg="nato_vise_integration" type="vise_converter_node" required="true" output="screen" />
+
+</launch>

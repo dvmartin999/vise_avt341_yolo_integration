@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Launch a simulated environment with the MRZR vehicle.
+    Connects to the simulation and spawns a vehicle with a given sensor suite.
+-->
+<launch>
+  <arg name="host" default="localhost"/>
+  <arg name="port" default="2000"/>
+  <arg name="role_name" default="mrzr"/>
+  <arg name="vehicle_filter" default="vehicle.polaris.mrzr"/>
+  <arg name="town" default="3RiversPaintball"/>
+  <!-- use comma separated format "x,y,z,roll,pitch,yaw" -->
+  <arg name="spawn_point" default="-45,-100,-8,0,0,70"/>
+  <arg name="sensor_definition_file" default="$(find mrzr_vise)/params/mrzr_sensors_low_fidelity.json"/>
+  <arg name="synchronous_mode" default="false"/>
+  <arg name="sim_step" default="0.05"/>
+  <arg name="client_timeout" default="10"/>
+  <arg name="disable_rendering" default="false"/>
+  <arg name="spawn_vehicle" default="true"/>
+  <arg name="launch_vise" default="false"/>
+  <arg name="launch_rviz" default="true"/>
+
+  <node pkg="tf2_ros" type="static_transform_publisher" name="odom_broadcaster" args="0 0 0 0 0 0 1 map odom" />
+
+  <!-- Launch VISE and the ROS to VISE bridge -->
+  <group ns="vise">
+    <include file="$(find vise_etc)/launch/nodes/vise.launch" if="$(arg launch_vise)">
+      <arg name="opengl" value="true"/>
+    </include>
+
+    <include file="$(find mrzr_vise)/launch/extra/rviz.launch" if="$(arg launch_rviz)"/>
+
+    <include file="$(find vise_etc)/launch/nodes/vise_ros_bridge.launch">
+      <arg name="host" value="$(arg host)"/>
+      <arg name="port" value="$(arg port)"/>
+      <arg name="environment" value="$(arg town)"/>
+      <arg name="synchronous_mode" value="$(arg synchronous_mode)"/>
+      <arg name="synchronous_mode_real_time" value="true"/>
+      <arg name="fixed_delta_seconds" value="$(arg sim_step)"/>
+      <arg name="client_timeout" value="$(arg client_timeout)"/>
+      <arg name="disable_rendering" value="$(arg disable_rendering)"/>
+    </include>
+
+    <!-- Controller to convert Ackermann commands to simulator throttle/steering/brake -->
+    <include file="$(find vise_etc)/launch/nodes/vise_ackermann_control.launch">
+      <arg name="role_name" value="$(arg role_name)"/>
+      <arg name="parameter_file" value="$(find mrzr_vise)/params/ackermann_control_params.yaml"/>
+    </include>
+
+    <!-- Spwans vehicle and sensors in the simulated environment -->
+    <include file="$(find vise_etc)/launch/nodes/spawn_vehicle.launch" if="$(arg spawn_vehicle)">
+      <arg name="vehicle_filter" value="$(arg vehicle_filter)"/>
+      <arg name="role_name" value="$(arg role_name)"/>
+      <arg name="spawn_point" value="$(arg spawn_point)"/>
+      <arg name="sensor_definition_file" value="$(arg sensor_definition_file)"/>
+      <arg name="client_timeout" value="$(arg client_timeout)"/>
+    </include>
+
+  </group>
+
+</launch>
