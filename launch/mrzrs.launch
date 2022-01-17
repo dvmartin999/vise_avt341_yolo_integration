@@ -11,9 +11,8 @@
   <arg name="vehicle_filter" default="vehicle.polaris.mrzr"/>
   <arg name="town" default="3RiversPaintball"/>
   <!-- use comma separated format "x,y,z,roll,pitch,yaw" -->
-  <arg name="spawn_point_follower" default="-45,-100,-8,0,0,70"/>
-  <arg name="spawn_point_leader" default="-42,-105,-8,0,0,70"/>
-  <arg name="sensor_definition_file" default="$(find mrzr_vise)/params/mrzr_sensors_low_fidelity.json"/>
+  <arg name="spawn_point_follower" default="-20,-120,-5,0,0,70"/>
+  <arg name="spawn_point_leader" default="-16,-125,-5,0,0,70"/>
   <arg name="synchronous_mode" default="false"/>
   <arg name="sim_step" default="0.05"/>
   <arg name="client_timeout" default="10"/>
@@ -48,18 +47,18 @@
       <arg name="role_name" value="$(arg role_name_follower)"/>
       <arg name="parameter_file" value="$(find mrzr_vise)/params/ackermann_control_params.yaml"/>
     </include>
-<!--
+
     <include file="$(find vise_etc)/launch/nodes/vise_ackermann_control.launch">
       <arg name="role_name" value="$(arg role_name_leader)"/>
       <arg name="parameter_file" value="$(find mrzr_vise)/params/ackermann_control_params.yaml"/>
     </include>
--->
+
     <!-- Spwans vehicles and sensors in the simulated environment -->
     <include file="$(find vise_etc)/launch/nodes/spawn_vehicle.launch" if="$(arg spawn_vehicle)">
       <arg name="vehicle_filter" value="$(arg vehicle_filter)"/>
       <arg name="role_name" value="$(arg role_name_follower)"/>
       <arg name="spawn_point" value="$(arg spawn_point_follower)"/>
-      <arg name="sensor_definition_file" value="$(arg sensor_definition_file)"/>
+      <arg name="sensor_definition_file" value="$(find nato_vise_integration)/config/mrzr_sensors_follower.json"/>
       <arg name="client_timeout" value="$(arg client_timeout)"/>
     </include>
 
@@ -67,7 +66,7 @@
       <arg name="vehicle_filter" value="$(arg vehicle_filter)"/>
       <arg name="role_name" value="$(arg role_name_leader)"/>
       <arg name="spawn_point" value="$(arg spawn_point_leader)"/>
-      <arg name="sensor_definition_file" value="$(arg sensor_definition_file)"/>
+      <arg name="sensor_definition_file" value="$(find mrzr_vise)/params/mrzr_sensors_low_fidelity.json"/>
       <arg name="client_timeout" value="$(arg client_timeout)"/>
     </include>
 

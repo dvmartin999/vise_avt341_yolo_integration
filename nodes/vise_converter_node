@@ -7,7 +7,7 @@ import tf2_py as tf2
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Pose
 from geometry_msgs.msg import Twist
-from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import PointCloud2, CompressedImage, Image
 from ackermann_msgs.msg import AckermannDriveStamped
 from tf.transformations import euler_from_quaternion
 from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
@@ -34,14 +34,20 @@ class ViseConverter(object):
             'avt_341/points', PointCloud2, latch=True, queue_size=1)
         self.vise_cmd_pub = rospy.Publisher(
             '/vise/mrzr/ackermann_cmd', AckermannDriveStamped, latch=True, queue_size=1)
+        self.image_pub = rospy.Publisher(
+            "/zed2/zed_node/left/image_rect_color", Image, latch=True, queue_size=1)
 
         # Set-up subscribers
         self.odometry_sub = rospy.Subscriber(
             '/vise/mrzr/odometry', Odometry, self.handle_odometry)
-        self.lidar_sub = rospy.Subscriber(
+        self.front_lidar_sub = rospy.Subscriber(
             '/vise/mrzr/lidar/front/point_cloud', PointCloud2, self.handle_point_cloud)
+        self.rear_lidar_sub = rospy.Subscriber(
+            '/vise/mrzr/lidar/rear/point_cloud', PointCloud2, self.handle_point_cloud)
         self.nato_cmd_sub = rospy.Subscriber(
             'avt_341/cmd_vel', Twist, self.handle_cmd_vel)
+        self.sim_image_sub = rospy.Subscriber(
+            '/vise/mrzr/camera/rgb/view/image_color', Image, self.handle_image)
 
 
     def handle_odometry(self, msg):
@@ -50,26 +56,22 @@ class ViseConverter(object):
         (yaw, pitch, roll) = euler_from_quaternion ([pose.orientation.w,pose.orientation.x,pose.orientation.y,pose.orientation.z])
         pose.position.x += 3*math.cos(yaw)
         pose.position.y -= 3*math.sin(yaw)
-        pose.position.z += 2
+        pose.position.z += 0.5
         self.spectator_cam_pub.publish(pose)
 
         # VISE and NATO stack are perfectly aligned on odom, so just republish
         self.nato_odom_pub.publish(msg)
 
     def handle_point_cloud(self, msg):
-        # Need to change frame to odom (from lidar/front)
+        # Need to change frame to odom (from lidar/front or lidar/rear)
         try:
             trans = self.tf_buffer.lookup_transform("odom", msg.header.frame_id,
                                                     msg.header.stamp,
                                                     rospy.Duration(2))
         except tf2.LookupException as ex:
-            print "Lookup exception converting ", msg.header.frame_id, " to odom"
-            print "TS: ", msg.header.stamp, " now: ", rospy.Time.now() 
             rospy.logwarn(ex)
             return
         except tf2.ExtrapolationException as ex:
-            print "Extrapolation exception converting ", msg.header.frame_id, " to odom"
-            print "TS: ", msg.header.stamp, " now: ", rospy.Time.now() 
             rospy.logwarn(ex)
             return
         points = do_transform_cloud(msg, trans)
@@ -87,7 +89,11 @@ class ViseConverter(object):
         #print "Sending commands: ", cmd.drive.speed, "  ", cmd.drive.steering_angle, "   ", cmd.header.stamp
         self.vise_cmd_pub.publish(cmd)
 
-
+    def handle_image(self, msg):
+        # The as-is yolo.py from the following algorithm uses a compressed image, but requires
+        # cv2 to convert to a cvImage. python3 doesn't seem to like the compressed_imgmsg_to_cv2
+        # call. We set-up a second approach, which uses a raw Image.
+        self.image_pub.publish(msg)
 
 def main(args=None):
     node = ViseConverter()
